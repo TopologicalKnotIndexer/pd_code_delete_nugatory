@@ -1,0 +1,19 @@
+[project]
+name = "pd-code-delete-nugatory"
+version = "0.0.1"
+description = "delete all nugatory crossing from a pd_code (link or knot)."
+authors = [
+    {name = "GGN_2015",email = "neko@jlulug.org"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pd_code_de_r1",
+    "pd_code_pre_nxt"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
