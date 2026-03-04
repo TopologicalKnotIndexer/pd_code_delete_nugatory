@@ -1,6 +1,6 @@
 [project]
 name = "pd-code-delete-nugatory"
-version = "0.0.1"
+version = "0.0.2"
 description = "delete all nugatory crossing from a pd_code (link or knot)."
 authors = [
     {name = "GGN_2015",email = "neko@jlulug.org"}
