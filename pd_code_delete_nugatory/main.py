@@ -156,5 +156,5 @@ def erase_all_nugatory(pd_code:list[list]):
     return pd_code
 
 if __name__ == "__main__":
-    pd_code = [[8, 11, 9, 12], [12, 9, 13, 10], [10, 13, 11, 14], [7, 14, 8, 1], [4, 1, 5, 2], [2, 5, 3, 6], [6, 3, 7, 4]]
+    pd_code = [[2, 9, 3, 10], [4, 7, 1, 8], [6, 11, 7, 12], [8, 3, 5, 4], [9, 2, 10, 1], [12, 5, 11, 6]]
     print(erase_all_nugatory(pd_code))
