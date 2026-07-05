@@ -29,7 +29,7 @@ def dfs_1(node, nxt:dict[Any, set], vis:set):
     if node in vis:
         return
     vis.add(node)
-    for nxt_node in nxt[node]:
+    for nxt_node in sorted(nxt[node]):
         dfs_1(nxt_node, nxt, vis)
 
 def graph_cc_cnt(weak_pd_code:list[list]):
@@ -85,18 +85,18 @@ def dfs_2(num, vis:set, nxt:dict, new_num:dict):
         raise AssertionError()
     
     # 遍历所有后继
-    for nxt_num in nxt[num]:
+    for nxt_num in sorted(nxt[num]):
         if nxt_num not in vis:
             dfs_2(nxt_num, vis, nxt, new_num)
 
 # 从 1 开始重新给所有元素编号
 def renumber(pd_code:list[list]) -> list[list]:
     pd_code = json.loads(json.dumps(pd_code))
-    num_set = set([
+    num_set = sorted(set([
         item
         for crossing in pd_code
         for item in crossing
-    ])
+    ]))
 
     # 这里不能直接用 get_pre_nxt
     # 因为 renumber 之前有不连贯的编号
