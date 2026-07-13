@@ -1,17 +1,14 @@
 [project]
 name = "pd-code-delete-nugatory"
 version = "0.2.1"
-description = "delete all nugatory crossing from a pd_code (link or knot)."
+description = "Detect and remove nugatory crossings from knot or link PD codes."
 authors = [
     {name = "GGN_2015",email = "neko@jlulug.org"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "pd-code-de-r1>=0.1.1",
-    "pd-code-pre-nxt>=0.1.0"
-]
+dependencies = []
 
 
 [build-system]

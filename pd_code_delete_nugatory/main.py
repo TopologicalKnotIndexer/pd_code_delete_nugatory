@@ -1,160 +1,181 @@
-import pd_code_de_r1
-import pd_code_pre_nxt
-from typing import Optional, Any
-import json
+"""Detect and remove Reidemeister-I and nugatory PD-code crossings."""
 
-def keep_safe(nxt:dict[Any, set], v):
-    if nxt.get(v) is None:
-        nxt[v] = set()
+from collections import Counter
+from copy import deepcopy
+from typing import Hashable
 
-def add_single_edge(nxt:dict[Any, set], v, u):
-    keep_safe(nxt, v)
-    if u not in nxt[v]:
-        nxt[v].add(u)
 
-def add_double_edge(nxt:dict[Any, set], v1, v2):
-    for v, u in [(v1, v2), (v2, v1)]:
-        add_single_edge(nxt, v, u)
+def validate_pd_code(pd_code: object) -> list[list[int]]:
+    """Return a normalized copy after weak structural validation."""
 
-def get_base_graph(weak_pd_code:list[list]):
+    if not isinstance(pd_code, list):
+        raise TypeError("PD code must be a list of crossings")
+    result: list[list[int]] = []
+    for index, crossing in enumerate(pd_code):
+        if not isinstance(crossing, (list, tuple)) or len(crossing) != 4:
+            raise ValueError(f"crossing {index} must contain exactly four labels")
+        normalized: list[int] = []
+        for label in crossing:
+            if isinstance(label, bool) or not isinstance(label, int) or label <= 0:
+                raise ValueError("arc labels must be positive integers")
+            normalized.append(label)
+        result.append(normalized)
 
-    # 获得邻接表
-    nxt = dict[Any, set]()
-    for i in range(len(weak_pd_code)):
-        for item in weak_pd_code[i]:
-            add_double_edge(nxt, item, f"c_{i}")
-    return nxt
+    counts = Counter(label for crossing in result for label in crossing)
+    invalid = sorted(label for label, count in counts.items() if count != 2)
+    if invalid:
+        raise ValueError(f"every arc label must occur exactly twice: {invalid}")
+    return result
 
-def dfs_1(node, nxt:dict[Any, set], vis:set):
-    if node in vis:
-        return
-    vis.add(node)
-    for nxt_node in sorted(nxt[node]):
-        dfs_1(nxt_node, nxt, vis)
 
-def graph_cc_cnt(weak_pd_code:list[list]):
-    nxt = get_base_graph(weak_pd_code)
+def _connect(graph: dict[Hashable, set[Hashable]], left: Hashable, right: Hashable):
+    graph.setdefault(left, set()).add(right)
+    graph.setdefault(right, set()).add(left)
 
-    # 获取节点集合
-    node_set = [
-        item
-        for item in nxt]
-    
-    # 开始 dfs
-    vis = set()
-    cnt = 0
-    for node in node_set:
-        if node not in vis:
-            cnt += 1
-            dfs_1(node, nxt, vis)
-    return cnt
 
-def is_nugatory(pd_code:list[list], idx:int) -> bool:
-    
-    # 由于没有 r1-move 因此一定每个交叉点四个编号互不相同
-    if len(set(pd_code[idx])) != 4:
-        raise AssertionError()
-    
-    #获得直接删除这个交叉点后的不完整的 pd_code
-    bad_pd_code = pd_code[:idx] + pd_code[idx+1:]
+def graph_cc_cnt(pd_code: list[list[int]]) -> int:
+    """Count components of the crossing/arc incidence graph."""
 
-    # 如果底图的连通分支数增多，则说明是 nugatory
-    return graph_cc_cnt(bad_pd_code) > graph_cc_cnt(pd_code)
+    graph: dict[Hashable, set[Hashable]] = {}
+    for index, crossing in enumerate(pd_code):
+        crossing_node = ("crossing", index)
+        graph.setdefault(crossing_node, set())
+        for label in crossing:
+            _connect(graph, crossing_node, ("arc", label))
 
-def get_index_of_nugatory(pd_code:list[list]) -> Optional[int]:
-    for i in range(len(pd_code)):
-        if is_nugatory(pd_code, i):
-            return i
+    visited: set[Hashable] = set()
+    components = 0
+    for start in graph:
+        if start in visited:
+            continue
+        components += 1
+        visited.add(start)
+        stack = [start]
+        while stack:
+            for neighbor in graph[stack.pop()]:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    stack.append(neighbor)
+    return components
+
+
+def renumber(pd_code: list[list[int]]) -> list[list[int]]:
+    """Renumber arcs consecutively while following each link component."""
+
+    current = validate_pd_code(pd_code)
+    if not current:
+        return []
+
+    adjacency: dict[int, list[int]] = {
+        label: [] for crossing in current for label in crossing
+    }
+
+    def add_strand(left: int, right: int):
+        adjacency[left].append(right)
+        adjacency[right].append(left)
+
+    for first, second, third, fourth in current:
+        add_strand(first, third)
+        add_strand(second, fourth)
+    if any(len(neighbors) != 2 for neighbors in adjacency.values()):
+        raise ValueError("arc labels do not form closed link components")
+
+    mapping: dict[int, int] = {}
+    next_number = 1
+    for start in sorted(adjacency):
+        if start in mapping:
+            continue
+        previous: int | None = None
+        current_label = start
+        while current_label not in mapping:
+            mapping[current_label] = next_number
+            next_number += 1
+            neighbors = list(adjacency[current_label])
+            if previous is None:
+                following = min(neighbors)
+            else:
+                try:
+                    neighbors.remove(previous)
+                except ValueError as exc:
+                    raise ValueError("broken strand adjacency") from exc
+                following = neighbors[0]
+            previous, current_label = current_label, following
+        if current_label != start:
+            raise ValueError("strand traversal entered a different component")
+
+    return [[mapping[label] for label in crossing] for crossing in current]
+
+
+def _remove_reidemeister_one(pd_code: list[list[int]]) -> list[list[int]]:
+    """Remove all repeated-label crossings before cut-vertex analysis."""
+
+    current = validate_pd_code(deepcopy(pd_code))
+    while True:
+        index = next(
+            (i for i, crossing in enumerate(current) if len(set(crossing)) < 4),
+            None,
+        )
+        if index is None:
+            return renumber(current)
+
+        crossing = current[index]
+        survivors = [label for label in crossing if crossing.count(label) == 1]
+        if len(survivors) not in {0, 2}:
+            raise ValueError("unsupported repeated-label crossing")
+        current = current[:index] + current[index + 1 :]
+        if survivors:
+            removed, retained = survivors
+            current = [
+                [retained if label == removed else label for label in item]
+                for item in current
+            ]
+
+
+def is_nugatory(pd_code: list[list[int]], idx: int) -> bool:
+    """Return whether crossing `idx` is a cut vertex of the projection graph."""
+
+    current = validate_pd_code(pd_code)
+    if not 0 <= idx < len(current):
+        raise IndexError(idx)
+    if len(set(current[idx])) != 4:
+        return False
+    without_crossing = current[:idx] + current[idx + 1 :]
+    return graph_cc_cnt(without_crossing) > graph_cc_cnt(current)
+
+
+def get_index_of_nugatory(pd_code: list[list[int]]) -> int | None:
+    """Return the first nugatory-crossing index, or `None`."""
+
+    current = validate_pd_code(pd_code)
+    for index in range(len(current)):
+        if is_nugatory(current, index):
+            return index
     return None
 
-# 把 vf 改成 vt，其余不变
-def replace_val(bad_pd_code:list[list], vf, vt)->list[list]:
-    return [
-        [item if item != vf else vt for item in crossing]
-        for crossing in bad_pd_code
+
+def erase_one_nugatory(pd_code: list[list[int]], index: int) -> list[list[int]]:
+    """Erase one verified nugatory crossing and reconnect opposite strands."""
+
+    current = validate_pd_code(pd_code)
+    if not is_nugatory(current, index):
+        raise ValueError(f"crossing {index} is not nugatory")
+    first, second, third, fourth = current[index]
+    reduced = current[:index] + current[index + 1 :]
+    reduced = [
+        [third if label == first else label for label in crossing]
+        for crossing in reduced
     ]
-
-# 这里的 nxt 只有一个元素
-# 是单向的 nxt
-def dfs_2(num, vis:set, nxt:dict, new_num:dict):
-    if num in vis:
-        return
-    vis.add(num)
-    new_num[num] = len(vis) # 当前元素个数就是编号
-    if nxt.get(num) is None:
-        raise AssertionError()
-    
-    # 遍历所有后继
-    for nxt_num in sorted(nxt[num]):
-        if nxt_num not in vis:
-            dfs_2(nxt_num, vis, nxt, new_num)
-
-# 从 1 开始重新给所有元素编号
-def renumber(pd_code:list[list]) -> list[list]:
-    pd_code = json.loads(json.dumps(pd_code))
-    num_set = sorted(set([
-        item
-        for crossing in pd_code
-        for item in crossing
-    ]))
-
-    # 这里不能直接用 get_pre_nxt
-    # 因为 renumber 之前有不连贯的编号
-    # 而 get_pre_nxt 要求编号必须连贯（所以这里使用无向图 dfs）
-    nxt = dict()
-    for crossing in pd_code:
-        add_double_edge(nxt, crossing[0], crossing[2])
-        add_double_edge(nxt, crossing[1], crossing[3])
-    
-    vis = set()
-    new_num = dict()
-    for num in num_set:
-        if num not in vis:
-            dfs_2(num, vis, nxt, new_num)
-
-    # 每个节点都必须有新的编号
-    if len(new_num) != len(num_set):
-        raise AssertionError()
-
-    return [
-        [new_num[item] for item in crossing]
-        for crossing in pd_code
+    reduced = [
+        [second if label == fourth else label for label in crossing]
+        for crossing in reduced
     ]
+    return _remove_reidemeister_one(reduced)
 
-def erase_one_nugatory(pd_code:list[list], index:int) -> list[list]:
-    if len(set(pd_code[index])) != 4:
-        raise AssertionError()
-    
-    ax, bx, cx, dx = pd_code[index]
-    pre, nxt = pd_code_pre_nxt.get_pre_nxt(pd_code)
-    
-    # 获取当前连通分支
-    loop = [ax]
-    while True:
-        loop.append(nxt[loop[-1]])
-        if loop[-1] == ax: # 找到了第一个元素第二次出现，退出
-            loop = loop[:-1]
-            break
-    
-    # 四个节点一定在同一个连通分支
-    if not (set([ax, bx, cx, dx]).issubset(set(loop))):
-        raise AssertionError()
-    
-    # 直接删掉这个 crossing
-    bad_pd_code = pd_code[:index] + pd_code[index+1:]
-    new_pd_code = replace_val(bad_pd_code, ax, cx)
-    new_pd_code = replace_val(new_pd_code, dx, bx)
-    return renumber(new_pd_code)
 
-def erase_all_nugatory(pd_code:list[list]):
-    pd_code = pd_code_de_r1.de_r1(pd_code)
-    while True:
-        index = get_index_of_nugatory(pd_code)
-        if index is None:
-            break
-        pd_code = erase_one_nugatory(pd_code, index)
-    return pd_code
+def erase_all_nugatory(pd_code: list[list[int]]) -> list[list[int]]:
+    """Remove R1 and nugatory crossings repeatedly to a fixed point."""
 
-if __name__ == "__main__":
-    pd_code = [[2, 9, 3, 10], [4, 7, 1, 8], [6, 11, 7, 12], [8, 3, 5, 4], [9, 2, 10, 1], [12, 5, 11, 6]]
-    print(erase_all_nugatory(pd_code))
+    current = _remove_reidemeister_one(pd_code)
+    while (index := get_index_of_nugatory(current)) is not None:
+        current = erase_one_nugatory(current, index)
+    return current
