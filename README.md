@@ -8,15 +8,36 @@ Detect and remove nugatory crossings from PD codes.
 pip install pd-code-delete-nugatory
 ```
 
-## Quick start
+## Usage example
 
-`from pd_code_delete_nugatory import erase_all_nugatory`.
+```python
+from pd_code_delete_nugatory import erase_all_nugatory, get_index_of_nugatory
 
-PD codes are lists of four-entry crossings. Each arc label must occur exactly twice. Functions validate their inputs and do not mutate caller-owned PD-code lists unless explicitly documented.
+pd = [[1, 1, 2, 2]]
+print(get_index_of_nugatory(pd))
+print(erase_all_nugatory(pd))
+```
+
+## Algorithm
+
+For each candidate crossing, the algorithm removes that crossing from a weak strand graph and compares graph connectivity. A crossing whose removal separates regions is nugatory. Erasing it reconnects the paired arcs, removes any induced Reidemeister-I crossing, and renumbers the remaining component cycles. The process repeats until no candidate remains.
+
+## Input conventions
+
+A PD code is represented as a list of four-entry crossings. Arc labels normally occur exactly twice. Public functions validate inputs and return new values rather than mutating caller-owned data unless their API explicitly says otherwise.
+
+## External software
+
+No external software is required.
 
 ## Development
 
-Use Python 3.10 or newer for Python packages. Build distributions with `poetry build`. Run the package's tests or examples before publishing. C++ projects require a modern standards-compliant compiler.
+Run examples and package checks before release. Python packages require Python 3.10 or newer. Build PyPI artifacts with:
+
+```bash
+poetry check
+poetry build
+```
 
 ## License
 
