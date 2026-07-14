@@ -65,3 +65,16 @@ No PyPI publication is performed as part of this repository's maintenance.
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+## Citation
+
+If you use this repository in academic work, please cite it as:
+
+```bibtex
+@software{topologicalknotindexer_pd_code_delete_nugatory,
+  author = {{TopologicalKnotIndexer contributors}},
+  title = {{pd\_code\_delete\_nugatory}},
+  year = {2026},
+  url = {https://github.com/TopologicalKnotIndexer/pd_code_delete_nugatory}
+}
+```
